@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'turnover_screener_page.dart';
+
 const _ink = Color(0xFF122033);
 const _muted = Color(0xFF6D7B8E);
 const _canvas = Color(0xFFF4F6F8);
@@ -904,6 +906,15 @@ class _GridStrategyPageState extends State<GridStrategyPage> {
           ],
         ),
         actions: [
+          IconButton(
+            tooltip: '换手率选股',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const TurnoverScreenerPage(),
+              ),
+            ),
+            icon: const Icon(Icons.query_stats_rounded),
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: FilledButton.tonalIcon(

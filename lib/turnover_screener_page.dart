@@ -31,6 +31,7 @@ class _TurnoverCandidate {
     required this.confirmed,
     required this.tomorrowCandidate,
     required this.reason,
+    this.klineAvailable = true,
   });
 
   final String code;
@@ -50,6 +51,7 @@ class _TurnoverCandidate {
   final bool confirmed;
   final bool tomorrowCandidate;
   final String reason;
+  final bool klineAvailable;
 }
 
 class _WatchItem {
@@ -156,10 +158,22 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
   static const _red = Color(0xFFD14B4B);
   static const _muted = Color(0xFF6D7B8E);
   static const _canvas = Color(0xFFF4F6F8);
+  static const _blue = Color(0xFF3977C3);
+  static const _amber = Color(0xFFC17A12);
+  static const _purple = Color(0xFF7956B3);
 
   final _client = http.Client();
+  final _scrollController = ScrollController();
   final _watchlist = <_WatchItem>[];
   final _rows = <_TurnoverCandidate>[];
+  int get _confirmedToAddCount => _rows
+      .where(
+        (row) =>
+            row.confirmed &&
+            row.klineAvailable &&
+            !_watchlist.any((item) => item.code == row.code),
+      )
+      .length;
   bool _loading = false;
   bool _refreshing = false;
   String _progress = '';
@@ -180,7 +194,17 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
   @override
   void dispose() {
     _client.close();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _scrollToTop() {
+    if (!_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 450),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   Future<void> _loadWatchlist() async {
@@ -222,36 +246,101 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
   }
 
   Future<Map<String, dynamic>> _getJson(Uri uri) async {
-    final response = await _client
-        .get(uri)
-        .timeout(const Duration(seconds: 15));
-    if (response.statusCode != 200)
-      throw Exception('行情接口 HTTP ${response.statusCode}');
-    final decoded = jsonDecode(utf8.decode(response.bodyBytes));
-    if (decoded is! Map<String, dynamic>) throw Exception('行情接口返回格式异常');
-    return decoded;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final response = await _client
+            .get(
+              uri,
+              headers: const {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                'Accept': 'application/json, text/plain, */*',
+                'Referer': 'https://quote.eastmoney.com/',
+              },
+            )
+            .timeout(const Duration(seconds: 15));
+        if (response.statusCode == 200) {
+          final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+          if (decoded is! Map<String, dynamic>) {
+            throw Exception('行情接口返回格式异常');
+          }
+          return decoded;
+        }
+        if (attempt == 2) {
+          throw Exception('行情接口 HTTP ${response.statusCode}');
+        }
+      } on http.ClientException {
+        if (attempt == 2) throw Exception('行情服务器连接中断，请稍后重试');
+      } on Exception catch (error) {
+        if (attempt == 2) rethrow;
+        if (!error.toString().contains('TimeoutException')) rethrow;
+      }
+      await Future<void>.delayed(Duration(milliseconds: 400 * (attempt + 1)));
+    }
+    throw Exception('行情请求失败，请稍后重试');
   }
 
   Future<List<Map<String, dynamic>>> _fetchAllQuotes() async {
     const fields = 'f12,f14,f2,f3,f8,f21';
-    final uri = Uri.https('push2.eastmoney.com', '/api/qt/clist/get', {
-      'pn': '1',
-      'pz': '10000',
-      'po': '1',
-      'np': '1',
-      'fltt': '2',
-      'invt': '2',
-      'fid': 'f3',
-      'fs': 'm:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23',
-      'fields': fields,
-    });
-    final data = (await _getJson(uri))['data'] as Map<String, dynamic>?;
-    final diff = data?['diff'];
-    if (diff is! List) throw Exception('全市场行情数据为空');
-    return diff
-        .whereType<Map>()
-        .map((item) => Map<String, dynamic>.from(item))
-        .toList();
+    const pageSize = 100;
+    Uri pageUri(int page) =>
+        Uri.https('push2.eastmoney.com', '/api/qt/clist/get', {
+          'pn': '$page',
+          'pz': '$pageSize',
+          'po': '1',
+          'np': '1',
+          'fltt': '2',
+          'invt': '2',
+          'fid': 'f3',
+          'fs': 'm:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23',
+          'fields': fields,
+        });
+
+    List<Map<String, dynamic>> parseRows(dynamic diff) {
+      final values = diff is List
+          ? diff
+          : diff is Map
+          ? diff.values.toList()
+          : const <dynamic>[];
+      return values
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+    }
+
+    final firstData = (await _getJson(pageUri(1)))['data'];
+    if (firstData is! Map<String, dynamic>) {
+      throw Exception('全市场行情数据为空');
+    }
+    final quotes = parseRows(firstData['diff']);
+    final total = _num(firstData['total']).toInt();
+    if (quotes.isEmpty) throw Exception('全市场行情数据为空');
+    final pageCount = total > 0 ? (total / pageSize).ceil() : 1;
+    if (mounted) {
+      setState(
+        () => _progress = '获取全市场行情：${quotes.length}/${total > 0 ? total : '?'}',
+      );
+    }
+
+    for (var firstPage = 2; firstPage <= pageCount; firstPage += 4) {
+      final pages = List.generate(
+        min(4, pageCount - firstPage + 1),
+        (index) => firstPage + index,
+      );
+      final pageResults = await Future.wait(
+        pages.map((page) async {
+          final pageData = (await _getJson(pageUri(page)))['data'];
+          if (pageData is! Map<String, dynamic>) {
+            throw Exception('行情列表第 $page 页数据格式异常');
+          }
+          return parseRows(pageData['diff']);
+        }),
+      );
+      quotes.addAll(pageResults.expand((rows) => rows));
+      if (mounted) {
+        setState(() => _progress = '获取全市场行情：${quotes.length}/$total');
+      }
+    }
+    return quotes;
   }
 
   Future<List<_DailyBar>> _fetchDailyBars(String code) async {
@@ -263,15 +352,21 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
       'secid': '${_marketPrefix(code)}.$code',
       'ut': '7eea3edcaed734bea9cbfc24409ed989',
       'fields1': 'f1,f2,f3,f4,f5,f6',
-      'fields2': 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
+      'fields2': 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f116',
       'klt': '101',
       'fqt': '1',
       'beg': apiDate(start),
       'end': apiDate(end),
     });
-    final data = (await _getJson(uri))['data'] as Map<String, dynamic>?;
+    final responseData = (await _getJson(uri))['data'];
+    if (responseData is! Map<String, dynamic>) {
+      throw Exception('日 K 接口未返回数据（secid ${_marketPrefix(code)}.$code）');
+    }
+    final data = responseData;
     final rows = data?['klines'];
-    if (rows is! List) throw Exception('日 K 不可用');
+    if (rows is! List) {
+      throw Exception('日 K 字段缺失（secid ${_marketPrefix(code)}.$code）');
+    }
     return rows
         .whereType<String>()
         .map((row) {
@@ -374,6 +469,34 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
     );
   }
 
+  _TurnoverCandidate _candidateWithUnavailableKline(
+    Map<String, dynamic> quote,
+    Object error,
+  ) {
+    final code = '${quote['f12'] ?? ''}';
+    final marketCap = _num(quote['f21']) / 100000000;
+    return _TurnoverCandidate(
+      code: code,
+      name: '${quote['f14'] ?? code}',
+      price: _num(quote['f2']),
+      changePercent: _num(quote['f3']),
+      turnover: _num(quote['f8']),
+      marketCap: marketCap,
+      threshold: _threshold(marketCap),
+      date: '',
+      close: _num(quote['f2']),
+      ma5: 0,
+      ma10: 0,
+      volumeMultiple: 0,
+      change20: 0,
+      position: '日K不可用',
+      confirmed: false,
+      tomorrowCandidate: false,
+      reason: '日 K 获取失败：${error.toString().replaceFirst('Exception: ', '')}',
+      klineAvailable: false,
+    );
+  }
+
   Future<void> _runScreen() async {
     if (_loading) return;
     setState(() {
@@ -399,43 +522,54 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
           .take(_maxCandidates.clamp(1, 1000).toInt())
           .toList();
       final evaluated = <_TurnoverCandidate>[];
+      var dailyQuoteFailures = 0;
+      var firstDailyQuoteError = '';
       for (var start = 0; start < selected.length; start += 5) {
         final batch = selected.skip(start).take(5);
         final results = await Future.wait(
           batch.map((quote) async {
             try {
               return await _evaluate(quote);
-            } catch (_) {
-              return null;
+            } catch (error) {
+              dailyQuoteFailures++;
+              firstDailyQuoteError = firstDailyQuoteError.isEmpty
+                  ? error.toString().replaceFirst('Exception: ', '')
+                  : firstDailyQuoteError;
+              return _candidateWithUnavailableKline(quote, error);
             }
           }),
         );
         evaluated.addAll(results.whereType<_TurnoverCandidate>());
-        if (mounted)
-          setState(
-            () => _progress =
-                '日 K 核验：${min(start + 5, selected.length)}/${selected.length}',
-          );
+        evaluated.sort((a, b) {
+          if (a.tomorrowCandidate != b.tomorrowCandidate) {
+            return a.tomorrowCandidate ? -1 : 1;
+          }
+          if (a.confirmed != b.confirmed) return a.confirmed ? -1 : 1;
+          return b.volumeMultiple.compareTo(a.volumeMultiple);
+        });
+        if (mounted) {
+          setState(() {
+            _rows
+              ..clear()
+              ..addAll(evaluated);
+            _progress =
+                '日 K 核验：${min(start + 5, selected.length)}/${selected.length}；已找到 ${evaluated.length} 只${dailyQuoteFailures > 0 ? '；行情请求失败 $dailyQuoteFailures 只（${firstDailyQuoteError}）' : ''}';
+          });
+        }
       }
-      evaluated.sort((a, b) {
-        if (a.tomorrowCandidate != b.tomorrowCandidate)
-          return a.tomorrowCandidate ? -1 : 1;
-        if (a.confirmed != b.confirmed) return a.confirmed ? -1 : 1;
-        return b.volumeMultiple.compareTo(a.volumeMultiple);
-      });
       if (mounted) {
         setState(() {
-          _rows.addAll(evaluated);
           _progress =
-              '扫描 ${quotes.length} 只；换手率达标 ${turnoverCandidates.length} 只；日 K 核验 ${selected.length} 只';
+              '扫描 ${quotes.length} 只；换手率达标 ${turnoverCandidates.length} 只；日 K 核验 ${selected.length} 只；找到 ${evaluated.length} 只${dailyQuoteFailures > 0 ? '；行情请求失败 $dailyQuoteFailures 只（${firstDailyQuoteError}）' : ''}';
         });
       }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         setState(
           () => _error =
               '扫描失败：${error.toString().replaceFirst('Exception: ', '')}',
         );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -545,8 +679,9 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
 
   Future<void> _addWatch(_TurnoverCandidate row) async {
     if (!row.tomorrowCandidate ||
-        _watchlist.any((item) => item.code == row.code))
+        _watchlist.any((item) => item.code == row.code)) {
       return;
+    }
     _watchlist.insert(
       0,
       _WatchItem(
@@ -556,6 +691,35 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
         close: row.close,
         ma5: row.ma5,
         ma10: row.ma10,
+      ),
+    );
+    await _saveWatchlist();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _addConfirmedToWatchlist() async {
+    final existingCodes = _watchlist.map((item) => item.code).toSet();
+    final candidates = _rows
+        .where(
+          (row) =>
+              row.confirmed &&
+              row.klineAvailable &&
+              !existingCodes.contains(row.code),
+        )
+        .toList();
+    if (candidates.isEmpty) return;
+
+    _watchlist.insertAll(
+      0,
+      candidates.map(
+        (row) => _WatchItem(
+          code: row.code,
+          name: row.name,
+          scanDate: row.date,
+          close: row.close,
+          ma5: row.ma5,
+          ma10: row.ma10,
+        ),
       ),
     );
     await _saveWatchlist();
@@ -608,7 +772,14 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
     return Scaffold(
       backgroundColor: _canvas,
       appBar: AppBar(title: const Text('换手率选股'), backgroundColor: _canvas),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _scrollToTop,
+        tooltip: '回到顶部',
+        icon: const Icon(Icons.arrow_upward),
+        label: const Text('回到顶部'),
+      ),
       body: ListView(
+        controller: _scrollController,
         padding: const EdgeInsets.all(16),
         children: [
           _card(
@@ -734,11 +905,30 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
                     Text('${_rows.length} 只'),
                   ],
                 ),
+                if (_rows.any(
+                  (row) => row.confirmed && row.klineAvailable,
+                )) ...[
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: FilledButton.tonalIcon(
+                      onPressed: _confirmedToAddCount > 0
+                          ? _addConfirmedToWatchlist
+                          : null,
+                      icon: const Icon(Icons.playlist_add_check),
+                      label: Text('量价通过加入观察（$_confirmedToAddCount）'),
+                    ),
+                  ),
+                ],
                 if (_rows.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 18),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 18),
                     child: Text(
-                      '点击“开始全市场扫描”获取候选股票',
+                      _loading
+                          ? '暂无核验结果；扫描中会逐步显示。'
+                          : _progress.isEmpty
+                          ? '点击“开始全市场扫描”获取候选股票'
+                          : '本次没有核验结果，请查看上方扫描状态。',
                       style: TextStyle(color: _muted),
                     ),
                   ),
@@ -795,22 +985,31 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
 
   Widget _candidateTile(_TurnoverCandidate row) {
     final watched = _watchlist.any((item) => item.code == row.code);
-    final signal = row.tomorrowCandidate
+    final signal = !row.klineAvailable
+        ? '日K不可用'
+        : row.tomorrowCandidate
         ? '次日买入候选'
         : row.confirmed
         ? '量价条件通过'
         : '需人工观察';
-    final color = row.tomorrowCandidate
+    final color = !row.klineAvailable
+        ? _amber
+        : row.tomorrowCandidate
         ? _green
-        : row.position.contains('风险') || row.position.contains('下跌')
+        : row.position.contains('滞涨') || row.position.contains('下跌')
         ? _red
-        : _muted;
+        : row.confirmed
+        ? _blue
+        : _amber;
+    final tint = Color.alphaBlend(color.withValues(alpha: 0.08), Colors.white);
+    final changeColor = row.change20 >= 0 ? _red : _green;
     return Container(
       margin: const EdgeInsets.only(top: 10),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: _canvas,
+        color: tint,
         borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -823,9 +1022,20 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
               ),
-              Text(
-                signal,
-                style: TextStyle(color: color, fontWeight: FontWeight.w700),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  signal,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
             ],
           ),
@@ -834,11 +1044,37 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
             '换手 ${row.turnover.toStringAsFixed(2)}%（门槛 ${row.threshold.toStringAsFixed(0)}%） · 流通市值 ${row.marketCap.toStringAsFixed(1)} 亿 · ${row.position}',
             style: const TextStyle(fontSize: 12, color: _muted),
           ),
-          Text(
-            '量能 ${row.volumeMultiple.toStringAsFixed(2)}x · 收盘 ${row.close.toStringAsFixed(2)} · MA5 ${row.ma5.toStringAsFixed(2)} / MA10 ${row.ma10.toStringAsFixed(2)} · 20日涨幅 ${row.change20.toStringAsFixed(1)}%',
-            style: const TextStyle(fontSize: 12, color: _muted),
-          ),
-          Text(row.reason, style: const TextStyle(fontSize: 12, color: _muted)),
+          const SizedBox(height: 5),
+          if (row.klineAvailable)
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                _metricTag(
+                  '量能 ${row.volumeMultiple.toStringAsFixed(2)}x',
+                  _purple,
+                ),
+                _metricTag('收盘 ${row.close.toStringAsFixed(2)}', _blue),
+                _metricTag(
+                  'MA5 ${row.ma5.toStringAsFixed(2)} / MA10 ${row.ma10.toStringAsFixed(2)}',
+                  _muted,
+                ),
+                _metricTag(
+                  '20日 ${row.change20 >= 0 ? '+' : ''}${row.change20.toStringAsFixed(1)}%',
+                  changeColor,
+                ),
+              ],
+            )
+          else
+            Text(
+              '换手率达标，${row.reason}',
+              style: const TextStyle(color: _amber, fontSize: 12),
+            ),
+          if (row.klineAvailable)
+            Text(
+              row.reason,
+              style: const TextStyle(fontSize: 12, color: _muted),
+            ),
           if (row.tomorrowCandidate)
             Align(
               alignment: Alignment.centerRight,
@@ -852,6 +1088,18 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
     );
   }
 
+  Widget _metricTag(String text, Color color) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.10),
+      borderRadius: BorderRadius.circular(7),
+    ),
+    child: Text(
+      text,
+      style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600),
+    ),
+  );
+
   Widget _watchTile(_WatchItem item) {
     final success = item.status.contains('条件满足');
     final statusColor = success
@@ -859,12 +1107,17 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
         : item.status.contains('未全部') || item.status.contains('失败')
         ? _red
         : _muted;
+    final statusTint = Color.alphaBlend(
+      statusColor.withValues(alpha: 0.08),
+      Colors.white,
+    );
     return Container(
       margin: const EdgeInsets.only(top: 10),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: _canvas,
+        color: statusTint,
         borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: statusColor.withValues(alpha: 0.22)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

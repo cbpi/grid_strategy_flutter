@@ -293,6 +293,7 @@ class _GridStrategyPageState extends State<GridStrategyPage> {
   final _bulkController = TextEditingController();
   final _tradePriceController = TextEditingController();
   final _tradeSharesController = TextEditingController();
+  final _httpClient = http.Client();
 
   final Map<String, StockProfile> _profiles = {};
   String _selectedSymbol = '002402';
@@ -317,6 +318,7 @@ class _GridStrategyPageState extends State<GridStrategyPage> {
     _bulkController.dispose();
     _tradePriceController.dispose();
     _tradeSharesController.dispose();
+    _httpClient.close();
     super.dispose();
   }
 
@@ -412,8 +414,8 @@ class _GridStrategyPageState extends State<GridStrategyPage> {
     );
 
     final responses = await Future.wait([
-      http.get(quoteUri),
-      http.get(klineUri),
+      _getMarketResponse(quoteUri),
+      _getMarketResponse(klineUri),
     ]);
 
     final quoteResponse = responses[0];
@@ -455,6 +457,30 @@ class _GridStrategyPageState extends State<GridStrategyPage> {
       date: parsed.last.first,
       name: name.isEmpty ? symbol : name,
     );
+  }
+
+  Future<http.Response> _getMarketResponse(Uri uri) async {
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        final response = await _httpClient
+            .get(uri)
+            .timeout(const Duration(seconds: 15));
+        if (response.statusCode == 200) return response;
+        if (attempt == 2) {
+          throw Exception('行情接口暂不可用（HTTP ${response.statusCode}）');
+        }
+      } on http.ClientException {
+        if (attempt == 2) throw Exception('行情服务器连接中断，请检查网络后重试');
+      } on FormatException {
+        if (attempt == 2) throw Exception('行情接口返回数据格式异常，请稍后重试');
+      } on Exception catch (error) {
+        if (attempt == 2) rethrow;
+        // Retry transient request and timeout failures before reporting them.
+        if (!error.toString().contains('TimeoutException')) rethrow;
+      }
+      await Future<void>.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+    }
+    throw Exception('行情请求失败，请稍后重试');
   }
 
   Future<void> _refreshMarketData() async {

@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'averaging_calculator_page.dart';
+import 'feature_drawer.dart';
 import 'turnover_screener_page.dart';
 
 const _ink = Color(0xFF122033);
@@ -60,6 +62,11 @@ class GridStrategyApp extends StatelessWidget {
         ),
       ),
       home: const GridStrategyPage(),
+      routes: {
+        '/grid': (_) => const GridStrategyPage(),
+        '/turnover': (_) => const TurnoverScreenerPage(),
+        '/averaging': (_) => const AveragingCalculatorPage(),
+      },
     );
   }
 }
@@ -909,6 +916,7 @@ class _GridStrategyPageState extends State<GridStrategyPage> {
         : _muted;
 
     return Scaffold(
+      drawer: const AppFeatureDrawer(selectedRoute: '/grid'),
       appBar: AppBar(
         backgroundColor: _canvas,
         surfaceTintColor: Colors.transparent,
@@ -932,15 +940,6 @@ class _GridStrategyPageState extends State<GridStrategyPage> {
           ],
         ),
         actions: [
-          IconButton(
-            tooltip: '换手率选股',
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                builder: (_) => const TurnoverScreenerPage(),
-              ),
-            ),
-            icon: const Icon(Icons.query_stats_rounded),
-          ),
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: FilledButton.tonalIcon(

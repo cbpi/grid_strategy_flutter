@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'feature_drawer.dart';
+
 class TurnoverScreenerPage extends StatefulWidget {
   const TurnoverScreenerPage({super.key});
 
@@ -268,8 +270,10 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
         if (attempt == 2) {
           throw Exception('行情接口 HTTP ${response.statusCode}');
         }
-      } on http.ClientException {
-        if (attempt == 2) throw Exception('行情服务器连接中断，请稍后重试');
+      } on http.ClientException catch (error) {
+        if (attempt == 2) {
+          throw Exception('行情服务器连接中断（${uri.host}）：${error.message}');
+        }
       } on Exception catch (error) {
         if (attempt == 2) rethrow;
         if (!error.toString().contains('TimeoutException')) rethrow;
@@ -771,6 +775,7 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _canvas,
+      drawer: const AppFeatureDrawer(selectedRoute: '/turnover'),
       appBar: AppBar(title: const Text('换手率选股'), backgroundColor: _canvas),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _scrollToTop,

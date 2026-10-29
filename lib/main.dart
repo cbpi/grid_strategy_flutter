@@ -30,7 +30,7 @@ class GridStrategyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '网格策略',
+      title: 'Grid Strategy',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,

@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.toolsadmin" "\0"
-            VALUE "FileDescription", "grid_strategy_app" "\0"
+            VALUE "FileDescription", "Grid Strategy" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "grid_strategy_app" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.toolsadmin. All rights reserved." "\0"
             VALUE "OriginalFilename", "grid_strategy_app.exe" "\0"
-            VALUE "ProductName", "grid_strategy_app" "\0"
+            VALUE "ProductName", "Grid Strategy" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

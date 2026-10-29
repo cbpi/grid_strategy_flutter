@@ -1,11 +1,11 @@
 {
-    "name": "grid_strategy_app",
-    "short_name": "grid_strategy_app",
+    "name": "Grid Strategy",
+    "short_name": "Grid Strategy",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#10233F",
+    "theme_color": "#1769E0",
+    "description": "网格策略、换手率选股与补仓计算工具",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

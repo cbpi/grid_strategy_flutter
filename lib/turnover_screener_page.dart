@@ -69,6 +69,8 @@ class _WatchItem {
     this.latestPrice,
     this.checks = const [],
     this.error = '',
+    this.consecutivePassDays = 0,
+    this.lastPassedDate = '',
   });
 
   final String code;
@@ -82,6 +84,8 @@ class _WatchItem {
   double? latestPrice;
   List<Map<String, dynamic>> checks;
   String error;
+  int consecutivePassDays;
+  String lastPassedDate;
 
   Map<String, dynamic> toJson() => {
     'code': code,
@@ -95,6 +99,8 @@ class _WatchItem {
     'latestPrice': latestPrice,
     'checks': checks,
     'error': error,
+    'consecutivePassDays': consecutivePassDays,
+    'lastPassedDate': lastPassedDate,
   };
 
   factory _WatchItem.fromJson(Map<String, dynamic> json) => _WatchItem(
@@ -112,6 +118,8 @@ class _WatchItem {
         .map((item) => Map<String, dynamic>.from(item))
         .toList(),
     error: json['error'] as String? ?? '',
+    consecutivePassDays: _num(json['consecutivePassDays']).round(),
+    lastPassedDate: json['lastPassedDate'] as String? ?? '',
   );
 }
 
@@ -552,19 +560,25 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
           return b.volumeMultiple.compareTo(a.volumeMultiple);
         });
         if (mounted) {
+          final passed = evaluated
+              .where((row) => row.klineAvailable && row.confirmed)
+              .toList();
           setState(() {
             _rows
               ..clear()
-              ..addAll(evaluated);
+              ..addAll(passed);
             _progress =
-                '日 K 核验：${min(start + 5, selected.length)}/${selected.length}；已找到 ${evaluated.length} 只${dailyQuoteFailures > 0 ? '；行情请求失败 $dailyQuoteFailures 只（${firstDailyQuoteError}）' : ''}';
+                '日 K 核验：${min(start + 5, selected.length)}/${selected.length}；量价条件通过 ${passed.length} 只${dailyQuoteFailures > 0 ? '；行情请求失败 $dailyQuoteFailures 只（${firstDailyQuoteError}）' : ''}';
           });
         }
       }
       if (mounted) {
+        final passedCount = evaluated
+            .where((row) => row.klineAvailable && row.confirmed)
+            .length;
         setState(() {
           _progress =
-              '扫描 ${quotes.length} 只；换手率达标 ${turnoverCandidates.length} 只；日 K 核验 ${selected.length} 只；找到 ${evaluated.length} 只${dailyQuoteFailures > 0 ? '；行情请求失败 $dailyQuoteFailures 只（${firstDailyQuoteError}）' : ''}';
+              '扫描 ${quotes.length} 只；换手率达标 ${turnoverCandidates.length} 只；日 K 核验 ${selected.length} 只；量价条件通过 $passedCount 只${dailyQuoteFailures > 0 ? '；行情请求失败 $dailyQuoteFailures 只（${firstDailyQuoteError}）' : ''}';
         });
       }
     } catch (error) {
@@ -616,6 +630,11 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
 
   Future<void> _refreshWatchlist() async {
     if (_refreshing || _watchlist.isEmpty) return;
+    final scanCount = _watchlist.length;
+    final now = DateTime.now();
+    final today =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final after0945 = now.hour > 9 || (now.hour == 9 && now.minute >= 45);
     setState(() => _refreshing = true);
     try {
       for (final item in _watchlist) {
@@ -667,6 +686,13 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
               : item.checks.every((check) => check['passed'] == true)
               ? '次日条件满足（候选）'
               : '条件未全部满足';
+          if (item.status == '次日条件满足（候选）' &&
+              item.scanDate.isNotEmpty &&
+              item.scanDate.compareTo(today) < 0 &&
+              item.lastPassedDate != today) {
+            item.consecutivePassDays += 1;
+            item.lastPassedDate = today;
+          }
         } catch (error) {
           item.status = '行情获取失败';
           item.error = error.toString().replaceFirst('Exception: ', '');
@@ -674,8 +700,24 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
         }
         if (mounted) setState(() {});
       }
+      _watchlist.removeWhere((item) {
+        final isForNextDay =
+            item.scanDate.isNotEmpty && item.scanDate.compareTo(today) < 0;
+        final stillWaiting = item.status.startsWith('等待09:45复核');
+        return after0945 &&
+            isForNextDay &&
+            !stillWaiting &&
+            item.status != '次日条件满足（候选）';
+      });
+      final removedCount = scanCount - _watchlist.length;
       await _saveWatchlist();
-      if (mounted) setState(() => _lastRefresh = '最近刷新：${_nowText()}');
+      if (mounted) {
+        setState(() {
+          _lastRefresh = removedCount > 0
+              ? '最近刷新：${_nowText()} · 移除未通过 $removedCount 只，保留通过 ${_watchlist.length} 只'
+              : '最近刷新：${_nowText()}';
+        });
+      }
     } finally {
       if (mounted) setState(() => _refreshing = false);
     }
@@ -933,7 +975,7 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
                           ? '暂无核验结果；扫描中会逐步显示。'
                           : _progress.isEmpty
                           ? '点击“开始全市场扫描”获取候选股票'
-                          : '本次没有核验结果，请查看上方扫描状态。',
+                          : '本次没有股票通过量价条件，请查看上方扫描状态。',
                       style: TextStyle(color: _muted),
                     ),
                   ),
@@ -1146,6 +1188,25 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
             '${item.status}${item.latestPrice == null ? '' : ' · 最新价 ${item.latestPrice!.toStringAsFixed(2)}'}',
             style: TextStyle(color: statusColor, fontWeight: FontWeight.w700),
           ),
+          if (item.consecutivePassDays > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _green.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '连续通过 ${item.consecutivePassDays} 天',
+                  style: const TextStyle(
+                    color: _green,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
           if (item.checks.isNotEmpty)
             ...item.checks.map((check) {
               final passed = check['passed'] == true;

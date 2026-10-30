@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'app_theme.dart';
 import 'feature_drawer.dart';
 
 class TurnoverScreenerPage extends StatefulWidget {
@@ -166,8 +167,9 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
   static const _storageKey = 'turnover_screener_watchlist_v1';
   static const _green = Color(0xFF16865B);
   static const _red = Color(0xFFD14B4B);
-  static const _muted = Color(0xFF6D7B8E);
-  static const _canvas = Color(0xFFF4F6F8);
+  Color get _muted => appIsNight ? AppPalette.darkMuted : AppPalette.lightMuted;
+  Color get _canvas =>
+      appIsNight ? AppPalette.darkCanvas : AppPalette.lightCanvas;
   static const _blue = Color(0xFF3977C3);
   static const _amber = Color(0xFFC17A12);
   static const _purple = Color(0xFF7956B3);
@@ -787,7 +789,7 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
 
   Widget _card({required Widget child}) => Card(
     elevation: 0,
-    color: Colors.white,
+    color: appIsNight ? AppPalette.darkSurface : AppPalette.lightSurface,
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
     child: Padding(padding: const EdgeInsets.all(16), child: child),
   );
@@ -818,7 +820,11 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
     return Scaffold(
       backgroundColor: _canvas,
       drawer: const AppFeatureDrawer(selectedRoute: '/turnover'),
-      appBar: AppBar(title: const Text('换手率选股'), backgroundColor: _canvas),
+      appBar: AppBar(
+        title: const Text('换手率选股'),
+        backgroundColor: _canvas,
+        foregroundColor: appIsNight ? AppPalette.darkInk : AppPalette.lightInk,
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _scrollToTop,
         tooltip: '回到顶部',
@@ -838,7 +844,7 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   '按流通市值与换手率筛异动，再检查日 K 量价。次日 09:45 后可手动刷新观察名单的分时快照。',
                   style: TextStyle(color: _muted, height: 1.45),
                 ),
@@ -923,7 +929,7 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
                   const SizedBox(height: 10),
                   Text(
                     _progress,
-                    style: const TextStyle(color: _muted, fontSize: 12),
+                    style: TextStyle(color: _muted, fontSize: 12),
                   ),
                 ],
                 if (_error.isNotEmpty) ...[
@@ -1011,11 +1017,11 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
                   _lastRefresh.isEmpty
                       ? '点击时获取一次快照，不持续订阅。建议下一交易日 09:45 后刷新。'
                       : _lastRefresh,
-                  style: const TextStyle(color: _muted, fontSize: 12),
+                  style: TextStyle(color: _muted, fontSize: 12),
                 ),
                 if (_watchlist.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 14),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
                     child: Text(
                       '尚无观察标的；从上方候选加入。',
                       style: TextStyle(color: _muted),
@@ -1048,7 +1054,10 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
         : row.confirmed
         ? _blue
         : _amber;
-    final tint = Color.alphaBlend(color.withValues(alpha: 0.08), Colors.white);
+    final tint = Color.alphaBlend(
+      color.withValues(alpha: 0.08),
+      appIsNight ? AppPalette.darkSurface : AppPalette.lightSurface,
+    );
     final changeColor = row.change20 >= 0 ? _red : _green;
     return Container(
       margin: const EdgeInsets.only(top: 10),
@@ -1089,7 +1098,7 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
           const SizedBox(height: 6),
           Text(
             '换手 ${row.turnover.toStringAsFixed(2)}%（门槛 ${row.threshold.toStringAsFixed(0)}%） · 流通市值 ${row.marketCap.toStringAsFixed(1)} 亿 · ${row.position}',
-            style: const TextStyle(fontSize: 12, color: _muted),
+            style: TextStyle(fontSize: 12, color: _muted),
           ),
           const SizedBox(height: 5),
           if (row.klineAvailable)
@@ -1118,10 +1127,7 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
               style: const TextStyle(color: _amber, fontSize: 12),
             ),
           if (row.klineAvailable)
-            Text(
-              row.reason,
-              style: const TextStyle(fontSize: 12, color: _muted),
-            ),
+            Text(row.reason, style: TextStyle(fontSize: 12, color: _muted)),
           if (row.tomorrowCandidate)
             Align(
               alignment: Alignment.centerRight,
@@ -1156,7 +1162,7 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
         : _muted;
     final statusTint = Color.alphaBlend(
       statusColor.withValues(alpha: 0.08),
-      Colors.white,
+      appIsNight ? AppPalette.darkSurface : AppPalette.lightSurface,
     );
     return Container(
       margin: const EdgeInsets.only(top: 10),
@@ -1223,7 +1229,7 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
           if (item.checkedAt.isNotEmpty)
             Text(
               '更新于 ${item.checkedAt}',
-              style: const TextStyle(color: _muted, fontSize: 11),
+              style: TextStyle(color: _muted, fontSize: 11),
             ),
         ],
       ),

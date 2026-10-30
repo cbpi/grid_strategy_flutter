@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'app_theme.dart';
 import 'feature_drawer.dart';
 
 class AveragingCalculatorPage extends StatefulWidget {
@@ -110,9 +111,13 @@ class _AveragingCalculatorPageState extends State<AveragingCalculatorPage> {
     final average = _averageCost;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F8),
+      backgroundColor: appIsNight
+          ? AppPalette.darkCanvas
+          : AppPalette.lightCanvas,
       appBar: AppBar(
-        backgroundColor: const Color(0xFFF4F6F8),
+        backgroundColor: appIsNight
+            ? AppPalette.darkCanvas
+            : AppPalette.lightCanvas,
         title: const Text('补仓计算'),
       ),
       drawer: const AppFeatureDrawer(selectedRoute: '/averaging'),
@@ -121,7 +126,9 @@ class _AveragingCalculatorPageState extends State<AveragingCalculatorPage> {
         children: [
           Card(
             elevation: 0,
-            color: Colors.white,
+            color: appIsNight
+                ? AppPalette.darkSurface
+                : AppPalette.lightSurface,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(18),
             ),
@@ -164,7 +171,9 @@ class _AveragingCalculatorPageState extends State<AveragingCalculatorPage> {
           const SizedBox(height: 12),
           Card(
             elevation: 0,
-            color: Colors.white,
+            color: appIsNight
+                ? AppPalette.darkSurface
+                : AppPalette.lightSurface,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(18),
             ),
@@ -178,9 +187,14 @@ class _AveragingCalculatorPageState extends State<AveragingCalculatorPage> {
                     style: TextStyle(fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 6),
-                  const Text(
+                  Text(
                     '填写本次补仓产生的费用；留空按 0 元计算。',
-                    style: TextStyle(color: Color(0xFF6D7B8E), fontSize: 12),
+                    style: TextStyle(
+                      color: appIsNight
+                          ? AppPalette.darkMuted
+                          : AppPalette.lightMuted,
+                      fontSize: 12,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   _input('手续费', _commissionController, suffix: '元'),
@@ -195,7 +209,9 @@ class _AveragingCalculatorPageState extends State<AveragingCalculatorPage> {
           const SizedBox(height: 12),
           Card(
             elevation: 0,
-            color: const Color(0xFFEAF1FC),
+            color: appIsNight
+                ? const Color(0xFF202D40)
+                : const Color(0xFFEAF1FC),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(18),
             ),
@@ -225,11 +241,16 @@ class _AveragingCalculatorPageState extends State<AveragingCalculatorPage> {
               ),
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(4, 8, 4, 24),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 8, 4, 24),
             child: Text(
               '计算口径：原持仓成本 + 补仓金额 + 本次填写的费用。结果仅用于估算。',
-              style: TextStyle(color: Color(0xFF6D7B8E), fontSize: 12),
+              style: TextStyle(
+                color: appIsNight
+                    ? AppPalette.darkMuted
+                    : AppPalette.lightMuted,
+                fontSize: 12,
+              ),
             ),
           ),
         ],
@@ -240,7 +261,12 @@ class _AveragingCalculatorPageState extends State<AveragingCalculatorPage> {
   Widget _result(String label, String value, {bool emphasize = false}) => Row(
     mainAxisAlignment: MainAxisAlignment.spaceBetween,
     children: [
-      Text(label, style: const TextStyle(color: Color(0xFF536275))),
+      Text(
+        label,
+        style: TextStyle(
+          color: appIsNight ? AppPalette.darkMuted : const Color(0xFF536275),
+        ),
+      ),
       Text(
         value,
         style: TextStyle(

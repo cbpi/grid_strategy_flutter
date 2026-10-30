@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -5,13 +6,15 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'app_theme.dart';
 import 'averaging_calculator_page.dart';
 import 'feature_drawer.dart';
 import 'turnover_screener_page.dart';
 
-const _ink = Color(0xFF122033);
-const _muted = Color(0xFF6D7B8E);
-const _canvas = Color(0xFFF4F6F8);
+Color get _ink => appIsNight ? AppPalette.darkInk : AppPalette.lightInk;
+Color get _muted => appIsNight ? AppPalette.darkMuted : AppPalette.lightMuted;
+Color get _canvas =>
+    appIsNight ? AppPalette.darkCanvas : AppPalette.lightCanvas;
 const _blue = Color(0xFF1769E0);
 const _green = Color(0xFF16865B);
 const _red = Color(0xFFD14B4B);
@@ -24,43 +27,71 @@ void main() {
   runApp(const GridStrategyApp());
 }
 
-class GridStrategyApp extends StatelessWidget {
+class GridStrategyApp extends StatefulWidget {
   const GridStrategyApp({super.key});
+
+  @override
+  State<GridStrategyApp> createState() => _GridStrategyAppState();
+}
+
+class _GridStrategyAppState extends State<GridStrategyApp>
+    with WidgetsBindingObserver {
+  Timer? _themeTimer;
+
+  DateTime get _beijingNow =>
+      DateTime.now().toUtc().add(const Duration(hours: 8));
+
+  bool _isNightAt(DateTime beijingTime) =>
+      beijingTime.hour >= 19 || beijingTime.hour < 7;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    appIsNight = _isNightAt(_beijingNow);
+    _scheduleThemeSwitch();
+  }
+
+  void _scheduleThemeSwitch() {
+    _themeTimer?.cancel();
+    final now = _beijingNow;
+    final nextHour = now.hour < 7 ? 7 : (now.hour < 19 ? 19 : 31);
+    final boundary = DateTime.utc(now.year, now.month, now.day, nextHour);
+    _themeTimer = Timer(boundary.difference(now), () {
+      if (!mounted) return;
+      final shouldBeNight = _isNightAt(_beijingNow);
+      if (appIsNight != shouldBeNight) {
+        setState(() => appIsNight = shouldBeNight);
+      }
+      _scheduleThemeSwitch();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      final shouldBeNight = _isNightAt(_beijingNow);
+      if (appIsNight != shouldBeNight)
+        setState(() => appIsNight = shouldBeNight);
+      _scheduleThemeSwitch();
+    }
+  }
+
+  @override
+  void dispose() {
+    _themeTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Grid Strategy',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        scaffoldBackgroundColor: _canvas,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: _blue,
-          brightness: Brightness.light,
-        ),
-        fontFamily: 'sans',
-        inputDecorationTheme: InputDecorationTheme(
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: BorderSide(color: Colors.black.withValues(alpha: .06)),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(14),
-            borderSide: const BorderSide(color: _blue, width: 1.4),
-          ),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 14,
-            vertical: 12,
-          ),
-        ),
-      ),
+      theme: AppPalette.theme(Brightness.light),
+      darkTheme: AppPalette.theme(Brightness.dark),
+      themeMode: appIsNight ? ThemeMode.dark : ThemeMode.light,
       home: const GridStrategyPage(),
       routes: {
         '/grid': (_) => const GridStrategyPage(),
@@ -931,7 +962,7 @@ class _GridStrategyPageState extends State<GridStrategyPage> {
             ),
             Text(
               '${profile.name} · 网格策略',
-              style: const TextStyle(
+              style: TextStyle(
                 color: _ink,
                 fontWeight: FontWeight.w800,
                 fontSize: 20,
@@ -1080,7 +1111,7 @@ class _GridStrategyPageState extends State<GridStrategyPage> {
         ? null
         : ((price - profile.ma20!) / profile.ma20!) * 100;
     return _surface(
-      color: _ink,
+      color: appIsNight ? AppPalette.darkSurface : _ink,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1288,7 +1319,7 @@ class _GridStrategyPageState extends State<GridStrategyPage> {
           const SizedBox(height: 14),
           Text(
             advisor['title'] as String,
-            style: const TextStyle(
+            style: TextStyle(
               color: _ink,
               fontSize: 19,
               fontWeight: FontWeight.w800,
@@ -1297,7 +1328,7 @@ class _GridStrategyPageState extends State<GridStrategyPage> {
           const SizedBox(height: 6),
           Text(
             advisor['reason'] as String,
-            style: const TextStyle(color: _muted, height: 1.4),
+            style: TextStyle(color: _muted, height: 1.4),
           ),
           const SizedBox(height: 14),
           Row(
@@ -1374,7 +1405,7 @@ class _GridStrategyPageState extends State<GridStrategyPage> {
                           const SizedBox(height: 3),
                           Text(
                             level.price == null ? '--' : _money(level.price!),
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: _ink,
                               fontSize: 17,
                               fontWeight: FontWeight.w800,
@@ -1469,7 +1500,7 @@ class _GridStrategyPageState extends State<GridStrategyPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
+              Text(
                 '每日快照',
                 style: TextStyle(color: _ink, fontWeight: FontWeight.w800),
               ),
@@ -1495,11 +1526,11 @@ class _GridStrategyPageState extends State<GridStrategyPage> {
                     dense: true,
                     title: Text(
                       '${item.dataDate}  价 ${_money(item.price)} / MA20 ${_money(item.ma20)}',
-                      style: const TextStyle(color: _ink, fontSize: 13),
+                      style: TextStyle(color: _ink, fontSize: 13),
                     ),
                     subtitle: Text(
                       '持仓 ${item.holdings} 股，成本 ${_money(item.costPrice)}',
-                      style: const TextStyle(color: _muted, fontSize: 12),
+                      style: TextStyle(color: _muted, fontSize: 12),
                     ),
                     trailing: TextButton(
                       onPressed: () => _loadSnapshot(item),
@@ -1509,7 +1540,7 @@ class _GridStrategyPageState extends State<GridStrategyPage> {
                 ),
           if (profile.strategyLogs.isNotEmpty) ...[
             const Divider(height: 26),
-            const Text(
+            Text(
               '最近策略日志',
               style: TextStyle(color: _ink, fontWeight: FontWeight.w800),
             ),
@@ -1535,22 +1566,22 @@ class _GridStrategyPageState extends State<GridStrategyPage> {
     );
   }
 
-  Widget _surface({
-    required Widget child,
-    Color color = Colors.white,
-    Color? borderColor,
-  }) {
+  Widget _surface({required Widget child, Color? color, Color? borderColor}) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: color,
+        color:
+            color ??
+            (appIsNight ? AppPalette.darkSurface : AppPalette.lightSurface),
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
-          color: borderColor ?? Colors.black.withValues(alpha: .055),
+          color:
+              borderColor ??
+              (appIsNight ? Colors.white : Colors.black).withValues(alpha: .08),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: .035),
+            color: Colors.black.withValues(alpha: appIsNight ? .16 : .035),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -1567,7 +1598,7 @@ class _GridStrategyPageState extends State<GridStrategyPage> {
       children: [
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             color: _ink,
             fontWeight: FontWeight.w800,
             fontSize: 17,
@@ -1577,7 +1608,7 @@ class _GridStrategyPageState extends State<GridStrategyPage> {
           child: Text(
             subtitle,
             textAlign: TextAlign.right,
-            style: const TextStyle(color: _muted, fontSize: 11),
+            style: TextStyle(color: _muted, fontSize: 11),
           ),
         ),
       ],
@@ -1625,18 +1656,18 @@ class _GridStrategyPageState extends State<GridStrategyPage> {
     );
   }
 
-  Widget _summaryMetric(String label, String value, {Color color = _ink}) {
+  Widget _summaryMetric(String label, String value, {Color? color}) {
     return Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(color: _muted, fontSize: 11)),
+          Text(label, style: TextStyle(color: _muted, fontSize: 11)),
           const SizedBox(height: 4),
           Text(
             value,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: color,
+              color: color ?? _ink,
               fontWeight: FontWeight.w800,
               fontSize: 15,
             ),
@@ -1651,12 +1682,12 @@ class _GridStrategyPageState extends State<GridStrategyPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(color: _muted, fontSize: 11)),
+          Text(label, style: TextStyle(color: _muted, fontSize: 11)),
           const SizedBox(height: 4),
           Text(
             value,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               color: _ink,
               fontSize: 14,
               fontWeight: FontWeight.w800,
@@ -1677,11 +1708,11 @@ class _GridStrategyPageState extends State<GridStrategyPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(color: _muted, fontSize: 11)),
+          Text(label, style: TextStyle(color: _muted, fontSize: 11)),
           const SizedBox(height: 4),
           Text(
             value,
-            style: const TextStyle(color: _ink, fontWeight: FontWeight.w800),
+            style: TextStyle(color: _ink, fontWeight: FontWeight.w800),
           ),
         ],
       ),
@@ -1720,7 +1751,7 @@ class _GridStrategyPageState extends State<GridStrategyPage> {
           Expanded(
             child: Text(
               title,
-              style: const TextStyle(color: _ink, fontSize: 12, height: 1.35),
+              style: TextStyle(color: _ink, fontSize: 12, height: 1.35),
             ),
           ),
           const SizedBox(width: 10),
@@ -1739,7 +1770,7 @@ class _GridStrategyPageState extends State<GridStrategyPage> {
   Widget _emptyText(String text) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Text(text, style: const TextStyle(color: _muted, fontSize: 12)),
+      child: Text(text, style: TextStyle(color: _muted, fontSize: 12)),
     );
   }
 }

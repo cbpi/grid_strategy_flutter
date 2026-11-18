@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'app_theme.dart';
 import 'averaging_calculator_page.dart';
 import 'feature_drawer.dart';
+import 'signing_expiry_indicator.dart';
 import 'turnover_screener_page.dart';
 
 Color get _ink => appIsNight ? AppPalette.darkInk : AppPalette.lightInk;
@@ -971,6 +972,7 @@ class _GridStrategyPageState extends State<GridStrategyPage> {
           ],
         ),
         actions: [
+          const SigningExpiryIndicator(),
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: FilledButton.tonalIcon(

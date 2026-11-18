@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'app_theme.dart';
 import 'feature_drawer.dart';
+import 'signing_expiry_indicator.dart';
 
 class AveragingCalculatorPage extends StatefulWidget {
   const AveragingCalculatorPage({super.key});
@@ -119,6 +120,7 @@ class _AveragingCalculatorPageState extends State<AveragingCalculatorPage> {
             ? AppPalette.darkCanvas
             : AppPalette.lightCanvas,
         title: const Text('补仓计算'),
+        actions: const [SigningExpiryIndicator()],
       ),
       drawer: const AppFeatureDrawer(selectedRoute: '/averaging'),
       body: ListView(

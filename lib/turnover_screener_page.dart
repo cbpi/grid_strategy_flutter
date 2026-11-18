@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_theme.dart';
 import 'feature_drawer.dart';
+import 'signing_expiry_indicator.dart';
 
 class TurnoverScreenerPage extends StatefulWidget {
   const TurnoverScreenerPage({super.key});
@@ -824,6 +825,7 @@ class _TurnoverScreenerPageState extends State<TurnoverScreenerPage> {
         title: const Text('换手率选股'),
         backgroundColor: _canvas,
         foregroundColor: appIsNight ? AppPalette.darkInk : AppPalette.lightInk,
+        actions: const [SigningExpiryIndicator()],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _scrollToTop,
